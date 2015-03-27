@@ -1,0 +1,86 @@
+#! /bin/bash
+# FS QA Test No. 067
+#
+# Test for the preadv2 syscall
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Milosz Tanski <mtanski@gmail.com>.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, preadv2
+. ./common/rc
+. ./common/preadv2
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_test
+_requires_preadv2
+
+# test file we'll be using
+file=$SCRATCH_MNT/067.preadv2.$$
+
+# Create a file:
+# two regions of data and a hole in the middle
+# use O_DIRECT so it's not in the page cache
+echo "create file"
+$XFS_IO_PROG -t -f -d \
+	-c "pwrite 0 65536" \
+	-c "pwrite 131072 65536" \
+	$file > /dev/null
+
+# Make sure it returns EAGAIN on uncached data
+echo "uncached"
+$here/src/preadv2 -n -p 0 -l 1024 $file
+
+# Make sure we read in the whole file, after that RWF_NONBLOCK should return us all the data
+echo "cached"
+$XFS_IO_PROG -f $file -c "pread 0 262144" $file > /dev/null
+$here/src/preadv2 -n -p 0 -l 1024 $file
+
+# O_DIRECT and RWF_NONBLOCK should return EAGAIN always
+echo "O_DIRECT"
+$here/src/preadv2 -d -n -p 0 -l 1024 $file
+
+# Holes do not block
+echo "holes"
+$here/src/preadv2 -n -p 131072 -l 1024 $file
+
+# EOF behavior (no EAGAIN)
+echo "EOF"
+$here/src/preadv2 -n -p 196608 -l 1 $file
+
+# success, all done
+status=0
+exit

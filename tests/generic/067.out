@@ -1,0 +1,9 @@
+QA output created by 067
+create file
+uncached
+preadv2: Resource temporarily unavailable
+cached
+O_DIRECT
+preadv2: Resource temporarily unavailable
+holes
+EOF
